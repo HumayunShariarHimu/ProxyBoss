@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProxyBoss</title>
+    <style>
+        :root {
+            --glow-color: #00ff41;
+            --bg-color: #050505;
+            --terminal-bg: rgba(0, 0, 0, 0.9);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--glow-color);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Scanline Effect */
+        body::after {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1), rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .container {
+            width: 95%;
+            max-width: 900px;
+            margin: auto;
+            padding: 15px;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            border-bottom: 2px solid var(--glow-color);
+            margin-bottom: 15px;
+            text-shadow: 0 0 8px var(--glow-color);
+        }
+
+        header h1 { font-size: 1.5rem; margin: 10px 0; }
+
+        .terminal-box {
+            background: var(--terminal-bg);
+            border: 1px solid var(--glow-color);
+            height: 60vh;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 12px;
+            box-shadow: inset 0 0 10px #000;
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            margin-top: 10px;
+            font-size: 11px;
+            border: 1px solid var(--glow-color);
+            padding: 8px;
+            text-align: center;
+        }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        button {
+            background: transparent;
+            color: var(--glow-color);
+            border: 1px solid var(--glow-color);
+            padding: 12px 15px;
+            font-family: inherit;
+            cursor: pointer;
+            flex: 1;
+            min-width: 140px;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            background: var(--glow-color);
+            color: #000;
+        }
+
+        .log-entry { margin-bottom: 3px; line-break: anywhere; }
+        .system-msg { color: #ffb000; font-weight: bold; }
+        .proxy-msg { color: #ffffff; opacity: 0.9; }
+
+        footer {
+            margin-top: auto;
+            padding: 15px;
+            font-size: 11px;
+            text-align: center;
+            background: rgba(0,0,0,0.5);
+        }
+
+        a { color: var(--glow-color); text-decoration: none; border-bottom: 1px solid; }
+
+        /* Responsive Fix for Mobile */
+        @media (max-width: 480px) {
+            header h1 { font-size: 1.2rem; }
+            .terminal-box { height: 50vh; }
+            button { width: 100%; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>ProxyBoss</h1>
+        <div id="clock">SYSTEM TIME: --:--:--</div>
+    </header>
+
+    <div class="terminal-box" id="terminal">
+        <div class="log-entry system-msg">[SYSTEM] Initializing Mobile-Responsive Interface...</div>
+        <div class="log-entry system-msg">[SYSTEM] Waiting for hourly update cycle...</div>
+    </div>
+
+    <div class="stats-bar">
+        <div>STATUS: <span id="status">IDLE</span></div>
+        <div>PROXIES: <span id="count">0</span></div>
+        <div style="grid-column: span 2; border-top: 1px solid; padding-top: 5px; margin-top: 5px;">
+            NEXT AUTOMATIC BREACH: <span id="timer">60:00</span>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button onclick="fetchProxies()">Force Update</button>
+        <button onclick="downloadList()">Export .TXT</button>
+    </div>
+</div>
+
+<footer>
+   ProxyBoss © <strong>Humayun Shariar Himu</strong>
+</footer>
+
+<script>
+    const terminal = document.getElementById('terminal');
+    const statusTxt = document.getElementById('status');
+    const countTxt = document.getElementById('count');
+    const timerTxt = document.getElementById('timer');
+    let proxyStorage = [];
+    let timeLeft = 3600;
+
+    function log(msg, type = '') {
+        const div = document.createElement('div');
+        div.className = 'log-entry ' + type;
+        div.innerHTML = `> ${msg}`;
+        terminal.appendChild(div);
+        
+        // অটো স্ক্রোল ডাউন
+        terminal.scrollTop = terminal.scrollHeight;
+        
+        // লগ ক্লিনার (বেশি মেমরি নষ্ট হওয়া রোধ করতে)
+        if(terminal.childNodes.length > 200) terminal.removeChild(terminal.firstChild);
+    }
+
+    async function fetchProxies() {
+        statusTxt.innerText = "WORKING...";
+        log("ESTABLISHING CONNECTION TO GLOBAL NODES...", "system-msg");
+        
+        const api = 'https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all';
+
+        try {
+            const response = await fetch(api);
+            const data = await response.text();
+            const proxies = data.split('\n').filter(p => p.trim().length > 5);
+            
+            proxyStorage = [...new Set(proxies)];
+            countTxt.innerText = proxyStorage.length;
+            statusTxt.innerText = "ONLINE";
+            timeLeft = 3600; 
+
+            // একে একে লগে প্রক্সি দেখানো (হ্যাকার স্টাইল এনিমেশন)
+            let i = 0;
+            const displayInterval = setInterval(() => {
+                if(i < 30 && i < proxyStorage.length) { // লগে সর্বোচ্চ ৩০টি তাৎক্ষণিক দেখাবে
+                    log(`FOUND: ${proxyStorage[i]}`, "proxy-msg");
+                    i++;
+                } else {
+                    clearInterval(displayInterval);
+                    log(`TOTAL ${proxyStorage.length} NODES STORED IN MEMORY.`, "system-msg");
+                }
+            }, 50);
+
+        } catch (error) {
+            log("CRITICAL ERROR: API BREACH FAILED.", "system-msg");
+            statusTxt.innerText = "OFFLINE";
+        }
+    }
+
+    function downloadList() {
+        if(proxyStorage.length === 0) return alert("No proxies found!");
+        const blob = new Blob([proxyStorage.join('\n')], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ProxyBoss_Updated.txt`;
+        a.click();
+        log("SYSTEM: DOWNLOAD INITIATED.", "system-msg");
+    }
+
+    // টাইম এবং টাইমার
+    setInterval(() => {
+        document.getElementById('clock').innerText = "SYSTEM TIME: " + new Date().toLocaleTimeString();
+        
+        timeLeft--;
+        let m = Math.floor(timeLeft / 60);
+        let s = timeLeft % 60;
+        timerTxt.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+        
+        if (timeLeft <= 0) fetchProxies();
+    }, 1000);
+
+    window.onload = () => {
+        setTimeout(fetchProxies, 1500);
+    };
+</script>
+
+</body>
+</html>
